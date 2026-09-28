@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>זיהוי פנים - אלירן</title>
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            background: #000;
+            touch-action: manipulation;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #video {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+        }
+        
+        #status {
+            position: relative;
+            z-index: 10;
+            font-size: clamp(32px, 8vw, 48px);
+            font-weight: bold;
+            text-align: center;
+            padding: clamp(20px, 5vw, 40px);
+            transition: all 0.3s ease;
+            max-width: 90vw;
+            word-wrap: break-word;
+        }
+        
+        .authorized {
+            background: #fff;
+            color: #2ecc71;
+        }
+        
+        .unauthorized {
+            background: #000;
+            color: #e74c3c;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        button {
+            padding: clamp(10px, 2vw, 15px) clamp(15px, 3vw, 30px);
+            font-size: clamp(14px, 3vw, 18px);
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            white-space: nowrap;
+            min-width: 120px;
+        }
+        
+        #registerBtn {
+            background: #3498db;
+            color: white;
+        }
+        
+        #registerBtn:hover, #registerBtn:active {
+            background: #2980b9;
+        }
+        
+        #clearBtn {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        #clearBtn:hover, #clearBtn:active {
+            background: #c0392b;
+        }
+        
+        #thresholdBtn {
+            background: #9b59b6;
+            color: white;
+        }
+        
+        #thresholdBtn:hover, #thresholdBtn:active {
+            background: #8e44ad;
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* וידאו חי קטן */
+        #liveVideoContainer {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 50;
+            border: 3px solid #2ecc71;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            background: #000;
+        }
+        
+        #liveVideoContainer.unauthorized {
+            border-color: #e74c3c;
+        }
+        
+        #liveVideo {
+            width: clamp(120px, 25vw, 240px);
+            height: clamp(90px, 18.75vw, 180px);
+            display: block;
+            transform: scaleX(-1);
+        }
+        
+        #liveCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: clamp(120px, 25vw, 240px);
+            height: clamp(90px, 18.75vw, 180px);
+            pointer-events: none;
+            transform: scaleX(-1);
+        }
+        
+        #registrationModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        
+        #registrationModal.show {
+            display: flex;
+        }
+        
+        #modalContent {
+            background: white;
+            border-radius: 15px;
+            padding: clamp(15px, 3vw, 20px);
+            max-width: 95vw;
+            max-height: 95vh;
+            overflow-y: auto;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            width: 100%;
+        }
+        
+        #modalContent h2 {
+            margin-bottom: 10px;
+            color: #2c3e50;
+            font-size: clamp(20px, 5vw, 28px);
+        }
+        
+        #previewVideo {
+            max-width: 100%;
+            width: 100%;
+            height: auto;
+            border-radius: 10px;
+            background: #000;
+            margin: 10px 0;
+            transform: scaleX(-1);
+        }
+        
+        #previewCanvas {
+            position: absolute;
+            max-width: 100%;
+            width: 100%;
+            height: auto;
+            pointer-events: none;
+            transform: scaleX(-1);
+            top: 0;
+            left: 0;
+        }
+        
+        #videoContainer {
+            position: relative;
+            display: inline-block;
+            margin: 10px 0;
+            max-width: 100%;
+            width: 100%;
+        }
+        
+        #faceDetectionStatus {
+            margin: 10px 0;
+            font-size: clamp(16px, 3.5vw, 18px);
+            font-weight: bold;
+            min-height: 25px;
+        }
+        
+        .face-detected {
+            color: #2ecc71;
+        }
+        
+        .face-not-detected {
+            color: #e74c3c;
+        }
+        
+        #modalButtons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        #confirmRegisterBtn {
+            background: #2ecc71;
+            color: white;
+            padding: clamp(10px, 2vw, 12px) clamp(20px, 4vw, 30px);
+            font-size: clamp(16px, 3.5vw, 18px);
+            flex: 1;
+            min-width: 120px;
+        }
+        
+        #confirmRegisterBtn:hover, #confirmRegisterBtn:active {
+            background: #27ae60;
+        }
+        
+        #confirmRegisterBtn:disabled {
+            background: #95a5a6;
+        }
+        
+        #cancelRegisterBtn {
+            background: #95a5a6;
+            color: white;
+            padding: clamp(10px, 2vw, 12px) clamp(20px, 4vw, 30px);
+            font-size: clamp(16px, 3.5vw, 18px);
+            flex: 1;
+            min-width: 120px;
+        }
+        
+        #cancelRegisterBtn:hover, #cancelRegisterBtn:active {
+            background: #7f8c8d;
+        }
+        
+        #debugInfo {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.9);
+            color: #00ff00;
+            padding: clamp(8px, 2vw, 15px);
+            font-family: 'Courier New', monospace;
+            font-size: clamp(10px, 2.5vw, 13px);
+            z-index: 100;
+            border-radius: 5px;
+            max-width: min(90vw, 350px);
+            direction: ltr;
+            text-align: left;
+            line-height: 1.4;
+            word-break: break-all;
+        }
+
+        #captureInfo {
+            margin-top: 10px;
+            font-size: clamp(14px, 3.5vw, 16px);
+            color: #2c3e50;
+            font-weight: bold;
+        }
+
+        #instructions {
+            background: #ecf0f1;
+            padding: clamp(10px, 2.5vw, 15px);
+            border-radius: 10px;
+            margin: 10px 0;
+            font-size: clamp(12px, 3vw, 14px);
+            color: #2c3e50;
+        }
+
+        #instructions ol {
+            text-align: right;
+            margin: 8px 0;
+            padding-right: clamp(15px, 4vw, 20px);
+        }
+
+        #instructions li {
+            margin: clamp(4px, 1vw, 5px) 0;
+            text-align: right;
+        }
+
+        /* Desktop layout */
+        @media (min-width: 769px) {
+            #controls {
+                flex-direction: row;
+                gap: 10px;
+            }
+            
+            button {
+                min-width: auto;
+            }
+        }
+
+        /* Mobile landscape */
+        @media (max-width: 768px) and (orientation: landscape) {
+            #status {
+                font-size: clamp(20px, 5vw, 32px);
+                padding: clamp(10px, 2vw, 20px);
+            }
+            
+            #controls {
+                bottom: 5px;
+                right: 5px;
+                gap: 5px;
+            }
+            
+            button {
+                padding: 8px 15px;
+                font-size: 12px;
+                min-width: 100px;
+            }
+            
+            #liveVideoContainer {
+                bottom: 5px;
+                left: 5px;
+            }
+            
+            #debugInfo {
+                top: 5px;
+                left: 5px;
+                font-size: 9px;
+                padding: 5px;
+            }
+        }
+
+        /* Mobile portrait */
+        @media (max-width: 480px) {
+            #controls {
+                right: 5px;
+                bottom: 5px;
+            }
+            
+            button {
+                font-size: 13px;
+                padding: 8px 12px;
+                min-width: 100px;
+            }
+            
+            #liveVideoContainer {
+                left: 5px;
+                bottom: 5px;
+            }
+            
+            #modalContent {
+                padding: 12px;
+            }
+            
+            #instructions {
+                font-size: 11px;
+                padding: 8px;
+            }
+            
+            #modalButtons {
+                flex-direction: column;
+                width: 100%;
+            }
+            
+            #confirmRegisterBtn, #cancelRegisterBtn {
+                width: 100%;
+                min-width: auto;
+            }
+        }
+
+        /* Very small screens */
+        @media (max-width: 360px) {
+            #debugInfo {
+                display: none;
+            }
+            
+            button {
+                font-size: 12px;
+                padding: 7px 10px;
+                min-width: 90px;
+            }
+        }
+
+        /* Tablet */
+        @media (min-width: 481px) and (max-width: 768px) {
+            #modalContent {
+                max-width: 600px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <video id="video" autoplay playsinline></video>
+        <div id="status" class="unauthorized">מאתחל...</div>
+    </div>
+    
+    <!-- וידאו חי קטן -->
+    <div id="liveVideoContainer">
+        <video id="liveVideo" autoplay playsinline></video>
+        <canvas id="liveCanvas"></canvas>
+    </div>
+    
+    <div id="controls">
+        <button id="registerBtn">רשום פנים</button>
+        <button id="thresholdBtn">רגישות</button>
+        <button id="clearBtn">מחק</button>
+    </div>
+    
+    <div id="debugInfo"></div>
+
+    <div id="registrationModal">
+        <div id="modalContent">
+            <h2>רישום פנים</h2>
+            
+            <div id="instructions">
+                <strong>הוראות:</strong>
+                <ol>
+                    <li>הסתכל ישירות למצלמה</li>
+                    <li>המערכת תצלם 10 תמונות</li>
+                    <li>שנה זווית ראש בין צילומים</li>
+                    <li>שמור על תאורה טובה</li>
+                </ol>
+            </div>
+            
+            <div id="videoContainer">
+                <video id="previewVideo" autoplay playsinline></video>
+                <canvas id="previewCanvas"></canvas>
+            </div>
+            
+            <div id="captureInfo"></div>
+            <div id="faceDetectionStatus"></div>
+            
+            <div id="modalButtons">
+                <button id="confirmRegisterBtn" disabled>התחל רישום</button>
+                <button id="cancelRegisterBtn">ביטול</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const liveVideo = document.getElementById('liveVideo');
+        const liveCanvas = document.getElementById('liveCanvas');
+        const liveCtx = liveCanvas.getContext('2d');
+        const liveVideoContainer = document.getElementById('liveVideoContainer');
+        const status = document.getElementById('status');
+        const registerBtn = document.getElementById('registerBtn');
+        const thresholdBtn = document.getElementById('thresholdBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const debugInfo = document.getElementById('debugInfo');
+        
+        const registrationModal = document.getElementById('registrationModal');
+        const previewVideo = document.getElementById('previewVideo');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const previewCtx = previewCanvas.getContext('2d');
+        const faceDetectionStatus = document.getElementById('faceDetectionStatus');
+        const captureInfo = document.getElementById('captureInfo');
+        const confirmRegisterBtn = document.getElementById('confirmRegisterBtn');
+        const cancelRegisterBtn = document.getElementById('cancelRegisterBtn');
+        
+        let modelsLoaded = false;
+        let registeredDescriptors = [];
+        let lastAuthorizedTime = 0;
+        let isCapturing = false;
+        let capturedDescriptors = [];
+        let consecutiveMatches = 0;
+        let consecutiveNonMatches = 0;
+        let currentDetection = null;
+        
+        const AUTHORIZED_GRACE_PERIOD = 2000;
+        let MATCH_THRESHOLD = 0.45;
+        const REQUIRED_CAPTURES = 10;
+        const REQUIRED_CONSECUTIVE_MATCHES = 2;
+        
+        // זיהוי מובייל
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        // טעינת המודלים
+        async function loadModels() {
+            try {
+                updateDebugInfo('Loading...');
+                
+                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+                
+                await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+                await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+                await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+                
+                modelsLoaded = true;
+                updateDebugInfo('Ready ✓');
+                return true;
+            } catch (error) {
+                updateDebugInfo('Error: ' + error.message);
+                return false;
+            }
+        }
+        
+        // טעינת הגדרות
+        function loadSettings() {
+            const savedThreshold = localStorage.getItem('matchThreshold');
+            if (savedThreshold) {
+                MATCH_THRESHOLD = parseFloat(savedThreshold);
+            }
+        }
+        
+        // טעינת פנים שמורות
+        function loadRegisteredFace() {
+            const saved = localStorage.getItem('registeredDescriptors');
+            if (saved) {
+                const data = JSON.parse(saved);
+                registeredDescriptors = data.map(d => new Float32Array(d));
+                updateDebugInfo('Loaded ' + registeredDescriptors.length);
+            } else {
+                updateDebugInfo('No face');
+            }
+        }
+        
+        // שמירת פנים
+        function saveRegisteredFace(descriptors) {
+            const data = descriptors.map(d => Array.from(d));
+            localStorage.setItem('registeredDescriptors', JSON.stringify(data));
+            registeredDescriptors = descriptors;
+            updateDebugInfo('Saved ' + descriptors.length);
+        }
+        
+        // זיהוי פנים והחזרת דסקריפטור
+        async function detectFaceDescriptor(videoElement) {
+            if (!modelsLoaded) return null;
+            
+            const detection = await faceapi
+                .detectSingleFace(videoElement)
+                .withFaceLandmarks()
+                .withFaceDescriptor();
+            
+            return detection;
+        }
+        
+        // בדיקת התאמה מתקדמת עם ממוצע
+        function matchesFace(descriptor) {
+            if (!registeredDescriptors || registeredDescriptors.length === 0) {
+                return { match: false, distance: Infinity };
+            }
+            
+            const distances = registeredDescriptors.map(registeredDesc => 
+                faceapi.euclideanDistance(descriptor, registeredDesc)
+            );
+            
+            distances.sort((a, b) => a - b);
+            const topDistances = distances.slice(0, Math.min(5, distances.length));
+            const avgDistance = topDistances.reduce((a, b) => a + b, 0) / topDistances.length;
+            const allGoodMatches = topDistances.every(d => d < MATCH_THRESHOLD);
+            
+            return {
+                match: allGoodMatches && avgDistance < MATCH_THRESHOLD,
+                distance: avgDistance,
+                minDistance: distances[0],
+                maxGoodDistance: topDistances[topDistances.length - 1]
+            };
+        }
+        
+        // עדכון מידע דיבאג
+        function updateDebugInfo(text) {
+            const time = new Date().toLocaleTimeString('he-IL');
+            debugInfo.innerHTML = text + '<br><span style="color:#888">' + time + '</span>';
+        }
+        
+        // עדכון סטטוס עם תקופת חסד
+        function updateStatus(authorized, faceDetected) {
+            const currentTime = Date.now();
+            
+            if (faceDetected && authorized) {
+                consecutiveMatches++;
+                consecutiveNonMatches = 0;
+                
+                if (consecutiveMatches >= REQUIRED_CONSECUTIVE_MATCHES) {
+                    status.textContent = 'שלום אלירן';
+                    status.className = 'authorized';
+                    document.body.style.background = '#fff';
+                    liveVideoContainer.classList.remove('unauthorized');
+                    lastAuthorizedTime = currentTime;
+                }
+            } else {
+                const inGracePeriod = (currentTime - lastAuthorizedTime) < AUTHORIZED_GRACE_PERIOD;
+                
+                if (faceDetected) {
+                    consecutiveNonMatches++;
+                } else {
+                    if (!inGracePeriod) {
+                        consecutiveMatches = 0;
+                    }
+                }
+                
+                if (!inGracePeriod && (consecutiveNonMatches >= 2 || !faceDetected)) {
+                    status.textContent = 'אינך מורשה';
+                    status.className = 'unauthorized';
+                    document.body.style.background = '#000';
+                    liveVideoContainer.classList.add('unauthorized');
+                    consecutiveMatches = 0;
+                }
+            }
+        }
+        
+        // ציור וידאו חי
+        function drawLiveVideo() {
+            if (!currentDetection) {
+                liveCtx.clearRect(0, 0, liveCanvas.width, liveCanvas.height);
+                requestAnimationFrame(drawLiveVideo);
+                return;
+            }
+            
+            const videoWidth = liveVideo.videoWidth;
+            const videoHeight = liveVideo.videoHeight;
+            
+            if (videoWidth && videoHeight) {
+                const containerWidth = liveVideo.offsetWidth;
+                const containerHeight = liveVideo.offsetHeight;
+                
+                liveCanvas.width = containerWidth;
+                liveCanvas.height = containerHeight;
+                
+                const box = currentDetection.detection.box;
+                
+                liveCtx.clearRect(0, 0, liveCanvas.width, liveCanvas.height);
+                liveCtx.save();
+                liveCtx.translate(liveCanvas.width, 0);
+                liveCtx.scale(-1, 1);
+                
+                const scaleX = containerWidth / videoWidth;
+                const scaleY = containerHeight / videoHeight;
+                
+                liveCtx.strokeStyle = status.className === 'authorized' ? '#2ecc71' : '#e74c3c';
+                liveCtx.lineWidth = 2;
+                liveCtx.strokeRect(
+                    box.x * scaleX,
+                    box.y * scaleY,
+                    box.width * scaleX,
+                    box.height * scaleY
+                );
+                
+                liveCtx.restore();
+            }
+            
+            requestAnimationFrame(drawLiveVideo);
+        }
+        
+        // זיהוי מתמשך
+        async function detectLoop() {
+            if (!modelsLoaded) {
+                setTimeout(detectLoop, 100);
+                return;
+            }
+            
+            try {
+                const detection = await detectFaceDescriptor(video);
+                currentDetection = detection;
+                
+                if (!detection) {
+                    updateStatus(false, false);
+                    updateDebugInfo('No face');
+                } else if (registeredDescriptors.length === 0) {
+                    updateStatus(false, true);
+                    updateDebugInfo('Face | No reg');
+                } else {
+                    const descriptor = detection.descriptor;
+                    const result = matchesFace(descriptor);
+                    
+                    updateDebugInfo(
+                        'Avg: ' + result.distance.toFixed(3) + '<br>' +
+                        'Min: ' + result.minDistance.toFixed(3) + '<br>' +
+                        'Thr: ' + MATCH_THRESHOLD.toFixed(3) + '<br>' +
+                        'Str: ' + consecutiveMatches + '/' + REQUIRED_CONSECUTIVE_MATCHES + '<br>' +
+                        (result.match ? 'YES ✓' : 'NO ✗')
+                    );
+                    
+                    updateStatus(result.match, true);
+                }
+            } catch (error) {
+                updateDebugInfo('Err: ' + error.message);
+            }
+            
+            setTimeout(detectLoop, 100);
+        }
+        
+        // זיהוי בתצוגה מקדימה
+        async function detectPreview() {
+            if (!modelsLoaded || !registrationModal.classList.contains('show')) {
+                return;
+            }
+            
+            try {
+                const detection = await detectFaceDescriptor(previewVideo);
+                
+                const videoWidth = previewVideo.videoWidth;
+                const videoHeight = previewVideo.videoHeight;
+                
+                previewCanvas.width = videoWidth;
+                previewCanvas.height = videoHeight;
+                
+                previewCtx.clearRect(0, 0, videoWidth, videoHeight);
+                
+                if (detection) {
+                    const box = detection.detection.box;
+                    
+                    previewCtx.save();
+                    previewCtx.translate(videoWidth, 0);
+                    previewCtx.scale(-1, 1);
+                    
+                    previewCtx.strokeStyle = '#00ff00';
+                    previewCtx.lineWidth = 4;
+                    previewCtx.strokeRect(box.x, box.y, box.width, box.height);
+                    
+                    const landmarks = detection.landmarks.positions;
+                    previewCtx.fillStyle = '#00ff00';
+                    landmarks.forEach(point => {
+                        previewCtx.beginPath();
+                        previewCtx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
+                        previewCtx.fill();
+                    });
+                    
+                    previewCtx.restore();
+                    
+                    faceDetectionStatus.textContent = '✓ פנים זוהו';
+                    faceDetectionStatus.className = 'face-detected';
+                    
+                    if (!isCapturing) {
+                        confirmRegisterBtn.disabled = false;
+                    }
+                } else {
+                    faceDetectionStatus.textContent = '✗ לא זוהו פנים';
+                    faceDetectionStatus.className = 'face-not-detected';
+                    if (!isCapturing) {
+                        confirmRegisterBtn.disabled = true;
+                    }
+                }
+            } catch (error) {
+                console.error(error);
+            }
+            
+            if (registrationModal.classList.contains('show')) {
+                setTimeout(detectPreview, 100);
+            }
+        }
+        
+        // תהליך צילום מרובה
+        async function captureMultipleFrames() {
+            isCapturing = true;
+            capturedDescriptors = [];
+            confirmRegisterBtn.disabled = true;
+            confirmRegisterBtn.textContent = 'מצלם...';
+            
+            for (let i = 0; i < REQUIRED_CAPTURES; i++) {
+                captureInfo.textContent = `צילום ${i + 1}/${REQUIRED_CAPTURES}`;
+                if (i > 0 && i % 3 === 0) {
+                    captureInfo.textContent += ' - שנה זווית';
+                }
+                
+                let detection = null;
+                let attempts = 0;
+                
+                while (!detection && attempts < 50) {
+                    detection = await detectFaceDescriptor(previewVideo);
+                    if (!detection) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        attempts++;
+                    }
+                }
+                
+                if (detection) {
+                    capturedDescriptors.push(detection.descriptor);
+                    captureInfo.textContent = `✓ ${i + 1}/${REQUIRED_CAPTURES}`;
+                    
+                    previewCanvas.style.border = '5px solid #00ff00';
+                    setTimeout(() => {
+                        previewCanvas.style.border = 'none';
+                    }, 200);
+                    
+                    await new Promise(resolve => setTimeout(resolve, 800));
+                } else {
+                    captureInfo.textContent = 'שגיאה - נסה שוב';
+                    isCapturing = false;
+                    confirmRegisterBtn.disabled = false;
+                    confirmRegisterBtn.textContent = 'התחל רישום';
+                    return false;
+                }
+            }
+            
+            isCapturing = false;
+            captureInfo.textContent = '✓ הרישום הושלם!';
+            return true;
+        }
+        
+        // אתחול מצלמה
+        async function initCamera() {
+            try {
+                const constraints = {
+                    video: { 
+                        width: { ideal: isMobile ? 640 : 1280 },
+                        height: { ideal: isMobile ? 480 : 720 },
+                        facingMode: 'user'
+                    }
+                };
+                
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                liveVideo.srcObject = stream;
+                
+                await new Promise(resolve => {
+                    video.onloadedmetadata = resolve;
+                });
+                
+                return true;
+            } catch (error) {
+                updateDebugInfo('Cam err: ' + error.message);
+                return false;
+            }
+        }
+        
+        // פתיחת חלון רישום
+        async function openRegistrationModal() {
+            registrationModal.classList.add('show');
+            faceDetectionStatus.textContent = 'מאתחל...';
+            confirmRegisterBtn.disabled = true;
+            captureInfo.textContent = '';
+            
+            try {
+                const constraints = {
+                    video: { 
+                        width: { ideal: isMobile ? 640 : 1280 },
+                        height: { ideal: isMobile ? 480 : 720 },
+                        facingMode: 'user'
+                    }
+                };
+                
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                previewVideo.srcObject = stream;
+                
+                await new Promise(resolve => {
+                    previewVideo.onloadedmetadata = resolve;
+                });
+                
+                detectPreview();
+            } catch (error) {
+                alert('שגיאה בגישה למצלמה: ' + error.message);
+                closeRegistrationModal();
+            }
+        }
+        
+        // סגירת חלון רישום
+        function closeRegistrationModal() {
+            registrationModal.classList.remove('show');
+            if (previewVideo.srcObject) {
+                previewVideo.srcObject.getTracks().forEach(track => track.stop());
+            }
+            isCapturing = false;
+            capturedDescriptors = [];
+            confirmRegisterBtn.textContent = 'התחל רישום';
+        }
+        
+        // כפתורים
+        registerBtn.addEventListener('click', openRegistrationModal);
+        
+        confirmRegisterBtn.addEventListener('click', async () => {
+            const success = await captureMultipleFrames();
+            if (success && capturedDescriptors.length === REQUIRED_CAPTURES) {
+                saveRegisteredFace(capturedDescriptors);
+                closeRegistrationModal();
+                alert('הפנים נרשמו בהצלחה!');
+            }
+        });
+        
+        cancelRegisterBtn.addEventListener('click', closeRegistrationModal);
+        
+        thresholdBtn.addEventListener('click', () => {
+            const current = MATCH_THRESHOLD;
+            const newValue = prompt(
+                'סף רגישות (נמוך = מחמיר)\n\n' +
+                'מומלץ: 0.35-0.50\n' +
+                'נוכחי: ' + current,
+                current
+            );
+            
+            if (newValue !== null) {
+                const val = parseFloat(newValue);
+                if (!isNaN(val) && val > 0 && val < 1) {
+                    MATCH_THRESHOLD = val;
+                    localStorage.setItem('matchThreshold', val);
+                    alert('עודכן ל-' + val);
+                } else {
+                    alert('ערך לא תקין');
+                }
+            }
+        });
+        
+        clearBtn.addEventListener('click', () => {
+            if (confirm('למחוק את הרישום?')) {
+                localStorage.removeItem('registeredDescriptors');
+                registeredDescriptors = [];
+                consecutiveMatches = 0;
+                consecutiveNonMatches = 0;
+                lastAuthorizedTime = 0;
+                updateDebugInfo('Deleted');
+                updateStatus(false, false);
+            }
+        });
+        
+        // מניעת zoom במובייל בעת double tap
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', (e) => {
+            const now = Date.now();
+            if (now - lastTouchEnd <= 300) {
+                e.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+        
+        // אתחול
+        async function init() {
+            loadSettings();
+            
+            const loaded = await loadModels();
+            if (!loaded) {
+                status.textContent = 'שגיאה בטעינת המודלים';
+                return;
+            }
+            
+            const cameraStarted = await initCamera();
+            if (!cameraStarted) {
+                status.textContent = 'שגיאה בהפעלת המצלמה';
+                return;
+            }
+            
+            loadRegisteredFace();
+            status.textContent = registeredDescriptors.length > 0 ? 'אינך מורשה' : 'לחץ על רשום פנים';
+            updateStatus(false, false);
+            
+            detectLoop();
+            drawLiveVideo();
+        }
+        
+        init();
+    </script>
+</body>
+</html>
