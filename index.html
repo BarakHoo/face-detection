@@ -504,9 +504,21 @@
         async function loadModels() {
             try {
                 updateDebugInfo('Loading...');
-                
+
+                // Initialize a TensorFlow.js backend before using face-api.
+                // Prefer WebGL (GPU); fall back to CPU. This avoids the
+                // "highest priority backend 'wasm' has not yet been initialized"
+                // error that occurs when TF is used before a backend is ready.
+                const tf = faceapi.tf;
+                try {
+                    await tf.setBackend('webgl');
+                } catch (e) {
+                    await tf.setBackend('cpu');
+                }
+                await tf.ready();
+
                 const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
-                
+
                 await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
                 await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
                 await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
